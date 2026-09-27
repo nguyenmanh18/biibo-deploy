@@ -1,6 +1,6 @@
 # Deploy
 
-Đích: `https://english.biibo.app`, một VPS, quản lý hoàn toàn bằng
+Đích: `https://english.biibo.app` và `https://admin.biibo.app`, chung một VPS, quản lý hoàn toàn bằng
 `docker compose`. Kiến trúc và sức chứa nằm ở `infrastructure.md`; file này chỉ
 nói cách đưa code lên máy.
 
@@ -12,9 +12,10 @@ trên chính cái máy đang chạy — kể cả hai chỗ làm sai và cách p
 
 ## 1. Hình dạng
 
-**Ba repo, một VPS.** `biibo-backend` build image API, `biibo-vocabulary` build
-image web, `biibo-deploy` (repo này) giữ file vận hành. Cả ba ghi vào cùng
-`/opt/biibo`; mỗi repo đánh tag và deploy độc lập (bảng trong `README.md`).
+**Bốn repo, một VPS.** `biibo-backend` build image API, `biibo-vocab-english-web` build
+image web, `biibo-supper-admin` build image admin, `biibo-deploy` (repo này) giữ file
+vận hành. Cả bốn ghi vào cùng `/opt/biibo`; mỗi repo đánh tag và deploy độc lập
+(bảng trong `README.md`). `biibo-vocab-chinese-web` chưa có trong stack.
 
 **VPS không giữ source code.** Nó chỉ có vài file trong `/opt/biibo`:
 
@@ -22,13 +23,13 @@ image web, `biibo-deploy` (repo này) giữ file vận hành. Cả ba ghi vào c
 |---|---|---|
 | `docker-compose.prod.yml` | CI của `biibo-deploy` `scp` | repo này |
 | `Caddyfile`, `backup.sh` | CI của `biibo-deploy` `scp` | repo này |
-| `.env` | đặt tay một lần | **chỉ người**. CI chỉ chạm đúng dòng tag của mình: `API_TAG` (backend), `WEB_TAG` (web) |
+| `.env` | đặt tay một lần | **chỉ người**. CI chỉ chạm đúng dòng tag của mình: `API_TAG` (backend), `WEB_TAG` (web), `ADMIN_TAG` (admin) |
 
 Toàn bộ code đi trong image. VPS không có Node, không có Go toolchain, không
 `git pull`.
 
 ```
-tag v*  ─► GitHub Actions (amd64) ─► build 2 image ─► ghcr.io
+tag v*  ─► GitHub Actions (amd64) ─► build image ──► ghcr.io
                                                           │
                                    ssh ◄──────────────────┘
                                     └─► VPS: pull → migrate → up -d
@@ -86,7 +87,7 @@ mkdir -p /opt/biibo && chmod 700 /opt/biibo
 | `APP_BASE_URL`, `GOOGLE_REDIRECT_URL`, `ZALO_REDIRECT_URL` | `https://english.biibo.app…` |
 | `SESSION_COOKIE_NAME` | `biibo_session` |
 | `SESSION_COOKIE_SECURE` | `true` |
-| `API_TAG`, `WEB_TAG` | CI của từng repo ghi đè mỗi lần deploy (`IMAGE_TAG` cũ chỉ còn là dự phòng) |
+| `API_TAG`, `WEB_TAG`, `ADMIN_TAG` | CI của từng repo ghi đè mỗi lần deploy (`IMAGE_TAG` cũ chỉ còn là dự phòng) |
 
 > `AI_KEY_ENCRYPTION_SECRET` phải **giống hệt** máy dev nếu database đi lên từ
 > dump. Nó là khoá AES-256-GCM đang mã hoá `ai_credentials`, token R2 trong
@@ -283,7 +284,7 @@ nên một tag nháp kiểu `thu-nghiem-1` sẽ bị bỏ qua.
 ### Workflow làm gì
 
 > Mô tả dưới đây là quy trình gốc khi còn một repo. Giờ nó chia ba: bước 2 nằm
-> ở `biibo-backend` (image api, kèm `go test`) và `biibo-vocabulary` (image web);
+> ở `biibo-backend` (image api, kèm `go test`) và `biibo-vocab-english-web` (image web);
 > bước 3 là workflow `stack-*` của repo này; bước 4 của backend chỉ `pull api
 > migrate` → migrate → `up -d api` → chờ healthcheck, của web chỉ `up -d web`.
 > Deploy backend trước, web sau: `concurrency` chỉ xếp hàng trong một repo.
@@ -317,7 +318,7 @@ Chạy tay khi cần (ví dụ vừa sửa `.env`):
 cd /opt/biibo && docker compose -f docker-compose.prod.yml up -d
 ```
 
-Vì CI đã ghim `API_TAG`/`WEB_TAG` vào `.env`, lệnh trên dựng lại đúng bản đang chạy chứ
+Vì CI đã ghim `API_TAG`/`WEB_TAG`/`ADMIN_TAG` vào `.env`, lệnh trên dựng lại đúng bản đang chạy chứ
 không âm thầm nhảy sang `:latest`.
 
 ---

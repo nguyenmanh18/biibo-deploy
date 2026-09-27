@@ -2,7 +2,7 @@ name: Deploy stack
 
 # Đẩy file vận hành (compose, Caddyfile, backup.sh) lên VPS rồi áp dụng. Không
 # build image nào: bản API và web đang chạy được ghim bằng API_TAG / WEB_TAG trong
-# .env trên VPS, do CI của biibo-backend và biibo-vocabulary ghi.
+# .env trên VPS, do CI của biibo-backend và biibo-vocab-english-web ghi.
 #
 # Chỉ ĐÁNH TAG mới deploy:
 #   git tag -a stack-2026.09.27 -m "..." && git push origin main stack-2026.09.27

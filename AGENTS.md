@@ -2,7 +2,7 @@
 
 Production operations for the Biibo apps: the compose stack, Caddy, backups and
 the runbook in `docs/`. Nothing here is built; images come from `biibo-backend`
-(`biibo-api`) and `biibo-vocabulary` (`biibo-web`).
+(`biibo-api`) and `biibo-vocab-english-web` (`biibo-web`).
 
 - Never commit `.env`, `caddy.env` or any secret. The VPS `.env` is edited by a
   person; CI only rewrites `API_TAG` / `WEB_TAG`.
