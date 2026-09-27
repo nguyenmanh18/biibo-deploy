@@ -86,7 +86,6 @@ mkdir -p /opt/biibo && chmod 700 /opt/biibo
 | `APP_BASE_URL`, `GOOGLE_REDIRECT_URL`, `ZALO_REDIRECT_URL` | `https://english.biibo.app…` |
 | `SESSION_COOKIE_NAME` | `biibo_session` |
 | `SESSION_COOKIE_SECURE` | `true` |
-| `COMING_SOON` | `1` |
 | `API_TAG`, `WEB_TAG` | CI của từng repo ghi đè mỗi lần deploy (`IMAGE_TAG` cũ chỉ còn là dự phòng) |
 
 > `AI_KEY_ENCRYPTION_SECRET` phải **giống hệt** máy dev nếu database đi lên từ
@@ -763,18 +762,6 @@ Xếp theo thứ tự "hỏng thì đau đến đâu":
    thì gateway coi như tắt (§11).
 3. **Zalo redirect URI** chưa đăng ký → nút đăng nhập Zalo sẽ hỏng đúng kiểu
    Google đã hỏng trước 13/09.
-
-### Ngày mở cửa
-
-```bash
-ssh biibo
-sed -i 's/^COMING_SOON=.*/COMING_SOON=0/' /opt/biibo/.env
-cd /opt/biibo && docker compose -f docker-compose.prod.yml up -d
-curl -s -o /dev/null -w '%{http_code}\n' https://english.biibo.app/vi
-```
-
-Không phải build lại image: `COMING_SOON` không mang tiền tố `NEXT_PUBLIC_` nên
-Next đọc nó lúc chạy. Muốn quay lui thì đặt lại `=1` rồi `up -d`.
 
 ---
 

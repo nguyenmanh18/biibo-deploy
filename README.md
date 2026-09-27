@@ -5,8 +5,8 @@ source code: only the files in this repo plus its own `.env` and `caddy.env`.
 
 | File | Role |
 |---|---|
-| `docker-compose.prod.yml` | the whole stack: caddy, web, api, migrate, postgres, redis, restate |
-| `Caddyfile` | TLS + reverse proxy to `web` |
+| `docker-compose.prod.yml` | the whole stack: caddy, web, admin, api, migrate, postgres, redis, restate |
+| `Caddyfile` | TLS + reverse proxy to `web` and `admin` |
 | `backup.sh` | Postgres dump on the VPS |
 | `.env.example` | template for `/opt/biibo/.env` (never commit the real one) |
 | `docs/` | deployment runbook, infrastructure notes, first-setup log |
@@ -17,6 +17,7 @@ source code: only the files in this repo plus its own `.env` and `caddy.env`.
 |---|---|---|
 | `biibo-backend` | `v*` | build `biibo-api`, run migrations, restart `api`, write `API_TAG` |
 | `biibo-vocabulary` | `v*` | build `biibo-web`, restart `web`, write `WEB_TAG` |
+| `biibo-supper-admin` | `v*` | build `biibo-admin`, restart `admin`, write `ADMIN_TAG` |
 | `biibo-deploy` (this) | `stack-*` | copy these files to the VPS, `up -d`, reload Caddy |
 
 An API change ships from `biibo-backend` first, then the web app that uses it.

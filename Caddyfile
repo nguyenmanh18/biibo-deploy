@@ -61,3 +61,33 @@ english.biibo.app {
 		}
 	}
 }
+
+# Console admin dùng chung cho cả hệ sinh thái (English hôm nay, Trung sắp
+# tới), repo/image riêng (biibo-supper-admin), nhưng vẫn cùng một backend Go —
+# nên cùng cần chặn /api/v1/docs* y hệt site trên, chỉ khác upstream.
+admin.biibo.app {
+	encode zstd gzip
+
+	@docs path /api/v1/docs* /api/v1/openapi.json /api/v1/schemas*
+	basic_auth @docs {
+		{env.DOCS_AUTH_USER} {env.DOCS_AUTH_HASH}
+	}
+
+	reverse_proxy admin:3001 {
+		header_up X-Forwarded-For {client_ip}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	log {
+		output file /data/access-admin.log {
+			roll_size 50MiB
+			roll_keep 5
+		}
+	}
+}

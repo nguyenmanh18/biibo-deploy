@@ -49,6 +49,7 @@ services:
       - caddy_config:/config
     depends_on:
       - web
+      - admin
 
   # ── Ứng dụng ────────────────────────────────────────────────────────────
   web:
@@ -61,11 +62,25 @@ services:
       # NEXT_PUBLIC_* KHÔNG có ở đây — chúng đã bị nướng vào image lúc build.
       # Xem phần đầu Dockerfile.
       BACKEND_INTERNAL_URL: http://api:8080
-      # Hai biến này KHÔNG mang tiền tố NEXT_PUBLIC_, nên Next đọc chúng lúc
-      # chạy chứ không nướng vào bundle. Nhờ vậy ngày ra mắt chỉ cần sửa
-      # COMING_SOON=0 trong .env rồi `up -d` — không phải build lại image.
-      COMING_SOON: ${COMING_SOON:-1}
+      # Không mang tiền tố NEXT_PUBLIC_, nên Next đọc lúc chạy chứ không nướng
+      # vào bundle: đổi trong .env rồi `up -d` là đủ.
       GOOGLE_SITE_VERIFICATION: ${GOOGLE_SITE_VERIFICATION:-}
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # Admin dùng chung ecosystem (English hôm nay, Trung sắp tới), nên đứng riêng
+  # repo/image với web — không phải một route trong web nữa. Xem
+  # biibo-supper-admin/AGENTS.md.
+  admin:
+    image: ${IMAGE_PREFIX:-ghcr.io/nguyenmanh18}/biibo-admin:${ADMIN_TAG:-${IMAGE_TAG:-latest}}
+    container_name: biibo-admin
+    restart: unless-stopped
+    logging: *logging
+    # Không publish cổng: Caddy vào được qua mạng nội bộ.
+    environment:
+      # NEXT_PUBLIC_* KHÔNG có ở đây — chúng đã bị nướng vào image lúc build.
+      BACKEND_INTERNAL_URL: http://api:8080
     depends_on:
       api:
         condition: service_healthy
