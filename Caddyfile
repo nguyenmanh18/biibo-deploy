@@ -1,0 +1,63 @@
+# Biên HTTPS của production. Caddy tự xin và gia hạn chứng chỉ Let's Encrypt
+# qua cổng 80 — chạy được cả khi Cloudflare bật proxy (cam), vì Cloudflare cho
+# thử thách HTTP-01 đi xuyên qua. Đặt SSL/TLS của Cloudflare ở chế độ
+# "Full (strict)"; "Flexible" sẽ tạo vòng lặp chuyển hướng.
+
+# Cloudflare proxy (mây cam) đứng trước Caddy, nên hop ngay trước luôn là một
+# máy của Cloudflare. Không khai báo gì thì Caddy coi IP của máy đó là IP khách
+# và bỏ X-Forwarded-For đến từ ngoài — backend khi ấy đếm rate limit chung cho
+# mọi người đi qua cùng một edge. Khai dải IP của Cloudflare là proxy tin cậy
+# rồi đọc CF-Connecting-IP: header chỉ được tin khi request thật sự đến từ các
+# dải này, nên ai gọi thẳng vào IP của VPS cũng không giả được IP.
+#
+# Dải lấy từ https://www.cloudflare.com/ips (2026-09-23). Cloudflare hiếm khi
+# đổi, nhưng khi đổi thì máy mới sẽ bị coi là khách — sửa ở đây rồi reload.
+{
+	servers {
+		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+		client_ip_headers CF-Connecting-IP
+	}
+}
+
+english.biibo.app {
+	encode zstd gzip
+
+	# Một upstream duy nhất: Next. Trình duyệt gọi /api/v1/* cùng origin rồi
+	# Next chuyển tiếp sang Go, nhờ vậy cookie phiên đi lại được mà không cần
+	# CORS. Tách /api/v1 sang thẳng Go ở đây sẽ phá đúng thiết kế đó.
+	# Docs API sau một lớp mật khẩu. Không phải vì các endpoint kia hở — chúng
+	# vẫn đòi xác thực — mà vì bản đặc tả liệt kê 216 endpoint, trong đó 81 cái
+	# /admin/ kèm schema request. Đó là tấm bản đồ bề mặt quản trị, không nên
+	# tặng không cho người dò.
+	#
+	# Codegen KHÔNG đi qua đây: scripts/update-openapi-auto.js đọc thẳng
+	# BACKEND_INTERNAL_URL, nên `pnpm build` không hề biết tới lớp chặn này.
+	@docs path /api/v1/docs* /api/v1/openapi.json /api/v1/schemas*
+	basic_auth @docs {
+		{env.DOCS_AUTH_USER} {env.DOCS_AUTH_HASH}
+	}
+
+	# X-Forwarded-For gửi sang Next chỉ còn đúng một giá trị: IP khách thật
+	# ({client_ip}, đã qua bước tin cậy ở trên). Backend lấy mục đầu tiên
+	# (internal/httpx/respond.go); để Caddy nối chuỗi thì mục đầu là thứ khách
+	# tự điền, tức là ai cũng lách được rate limit bằng một header giả.
+	reverse_proxy web:3011 {
+		header_up X-Forwarded-For {client_ip}
+	}
+
+	header {
+		# HSTS: chỉ bật sau khi đã chắc chắn phục vụ HTTPS ổn định, vì trình
+		# duyệt sẽ ghi nhớ và không cho quay lại HTTP trong 1 năm.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	log {
+		output file /data/access.log {
+			roll_size 50MiB
+			roll_keep 5
+		}
+	}
+}

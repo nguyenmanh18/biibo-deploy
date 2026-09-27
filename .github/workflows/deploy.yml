@@ -1,0 +1,110 @@
+name: Deploy stack
+
+# Đẩy file vận hành (compose, Caddyfile, backup.sh) lên VPS rồi áp dụng. Không
+# build image nào: bản API và web đang chạy được ghim bằng API_TAG / WEB_TAG trong
+# .env trên VPS, do CI của biibo-backend và biibo-vocabulary ghi.
+#
+# Chỉ ĐÁNH TAG mới deploy:
+#   git tag -a stack-2026.09.27 -m "..." && git push origin main stack-2026.09.27
+on:
+  push:
+    tags: ["stack-*"]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production-stack
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Tag phải nằm trên main
+        if: github.ref_type == 'tag'
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo "::error::Tag $GITHUB_REF_NAME không nằm trên main."; exit 1; }
+
+      - name: Kiểm tra compose hợp lệ
+        run: |
+          set -euo pipefail
+          # Biến bắt buộc chỉ cần có mặt để compose dựng được cấu hình.
+          touch .env caddy.env
+          POSTGRES_PASSWORD=x REDIS_PASSWORD=x docker compose -f docker-compose.prod.yml config -q
+
+      - name: Chuẩn bị SSH
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          SSH_HOST_KEY: ${{ secrets.VPS_SSH_HOST_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          if [ -n "$SSH_HOST_KEY" ]; then
+            printf '%s\n' "$SSH_HOST_KEY" > ~/.ssh/known_hosts
+          else
+            echo "::warning::VPS_SSH_HOST_KEY chưa đặt — đang dùng ssh-keyscan (TOFU)"
+            ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          fi
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Gửi file vận hành lên VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_DIR: ${{ vars.DEPLOY_DIR || '/opt/biibo' }}
+        run: |
+          set -euo pipefail
+          # .env và caddy.env nằm sẵn trên máy và không bao giờ bị ghi đè từ đây.
+          scp -i ~/.ssh/id_deploy docker-compose.prod.yml Caddyfile backup.sh \
+            "$VPS_USER@$VPS_HOST:$DEPLOY_DIR/"
+
+      - name: Áp dụng
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_DIR: ${{ vars.DEPLOY_DIR || '/opt/biibo' }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_deploy "$VPS_USER@$VPS_HOST" \
+            "DEPLOY_DIR='$DEPLOY_DIR' bash -euo pipefail -s" <<'REMOTE'
+            cd "$DEPLOY_DIR"
+            chmod +x backup.sh   # scp không giữ bit thực thi
+
+            # Chỉ tạo lại container nào có cấu hình đổi. Image đã có sẵn trên máy
+            # theo tag đang ghim, nên không cần đăng nhập GHCR.
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+
+            # Caddyfile là file mount: `up -d` không thấy nó đổi, phải nạp lại.
+            # `-T </dev/null` để exec không nuốt phần còn lại của script từ stdin.
+            docker compose -f docker-compose.prod.yml exec -T caddy \
+              caddy reload --config /etc/caddy/Caddyfile </dev/null
+
+            docker compose -f docker-compose.prod.yml ps
+            echo "DEPLOY_SCRIPT_HOAN_TAT"
+          REMOTE
+
+      - name: Kiểm tra sau deploy
+        env:
+          SITE_URL: ${{ vars.SITE_URL || 'https://english.biibo.app' }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 12); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$SITE_URL/vi" || true)
+            [ "$code" = "200" ] && { echo "OK — $SITE_URL/vi trả về 200"; exit 0; }
+            echo "lần $i: HTTP $code, thử lại sau 10s"
+            sleep 10
+          done
+          echo "::error::Site không trả 200 sau 2 phút"
+          exit 1
