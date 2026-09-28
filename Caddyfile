@@ -81,6 +81,11 @@ admin.biibo.app {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
+		# Không có gì ở admin nên nằm trên Google. Gắn ở đây thay vì chỉ dựa vào
+		# thẻ meta của app, để phủ cả những response không phải HTML (API, file
+		# tĩnh, trang lỗi). Cố ý KHÔNG chặn bằng robots.txt: bị chặn crawl thì
+		# Google không đọc được noindex và vẫn có thể liệt kê URL trần.
+		X-Robots-Tag "noindex, nofollow, noarchive"
 		-Server
 	}
 
